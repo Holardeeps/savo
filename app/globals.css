@@ -462,7 +462,7 @@
 
   .form-btn {
     @apply text-[16px] leading-6 rounded-lg border border-bankGradient
-           bg-bank-gradient font-semibold text-white shadow-form;
+           bg-bank-gradient font-semibold text-white shadow-form cursor-pointer;
   }
 
   .form-link {

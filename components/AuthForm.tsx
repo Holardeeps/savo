@@ -14,6 +14,7 @@ import { authFormSchema } from "@/lib/utils";
 import { Loader } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { signIn, signUp } from "@/lib/actions/user.actions";
+import PlaidLink from "./PlaidLink";
 
 const AuthForm = ({ type }: { type: string }) => {
   const [user, setUser] = useState(null);
@@ -37,17 +38,30 @@ const AuthForm = ({ type }: { type: string }) => {
     setIsLoading(true);
 
     try {
+      const userData = {
+        firstName: data.firstName!,
+        lastName: data.lastName!,
+        address1: data.address1!,
+        city: data.city!,
+        state: data.state!,
+        postalCode: data.postalCode!,
+        dateOfBirth: data.dateOfBirth!,
+        ssn: data.ssn!,
+        email: data.email,
+        password: data.password,
+      };
+
       if (type === "sign-up") {
-        const newUser = await signUp(data);
+        const newUser = await signUp(userData);
         setUser(newUser);
       }
 
       if (type === "sign-in") {
-        // const response = await signIn({
-        //   email: data.email,
-        //   password: data.password,
-        // });
-        // if (reponse) router.push("/");
+        const response = await signIn({
+          email: data.email,
+          password: data.password,
+        });
+        if (response) router.push("/");
       }
     } catch (error) {
       console.error(error);
@@ -88,7 +102,9 @@ const AuthForm = ({ type }: { type: string }) => {
       </header>
 
       {user ? (
-        <div className="flex flex-col gap-4">{/* ?plaid  */}</div>
+        <div className="flex flex-col gap-4">
+          <PlaidLink user={user} variant={"primary"} />
+        </div>
       ) : (
         <>
           <Form {...form}>
@@ -165,7 +181,11 @@ const AuthForm = ({ type }: { type: string }) => {
                 placeholder="Enter your password..."
               />
               <div className="flex flex-col gap-4">
-                <Button type="submit" className="form-btn" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  className="form-btn cursor-pointer"
+                  disabled={isLoading}
+                >
                   {isLoading ? (
                     <>
                       <Loader size={20} className="animate-spin" /> &nbsp;

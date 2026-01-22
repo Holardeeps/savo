@@ -224,7 +224,7 @@ export const authFormSchema = (type: string) =>
         : z
             .string()
             .min(2, { message: "Enter at least 2 characters." })
-            .max(12, { message: "Enter not more than 12 characters." }),
+            .max(2, { message: "Enter not more than 2 characters." }),
     postalCode:
       type === "sign-in"
         ? z.string().optional()
@@ -249,3 +249,15 @@ export const authFormSchema = (type: string) =>
       .email({ message: "Please enter a correct email address." }),
     password: z.string().min(8, { message: "Enter at least 8 characters." }),
   });
+
+// export function mapAppwriteError(error: any) {
+//   if (error?.code === 401) {
+//     return "Invalid email or password";
+//   }
+
+//   if (error?.code === 409) {
+//     return "An account with this email already exists";
+//   }
+
+//   return "Something went wrong. Please try again.";
+// }

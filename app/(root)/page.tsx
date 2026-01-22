@@ -1,11 +1,12 @@
-import HeaderBox from "@/components/HeaderBox"
-import RightSidebar from "@/components/RightSidebar"
-import TotalBalance from "@/components/TotalBalance"
+import HeaderBox from "@/components/HeaderBox";
+import RightSidebar from "@/components/RightSidebar";
+import TotalBalance from "@/components/TotalBalance";
+import { getLoggedInUser } from "@/lib/actions/user.actions";
 
-const Home = () => {
+const Home = async () => {
+  const loggednIn = await getLoggedInUser();
+  // console.log(loggednIn);
 
-  const loggednIn = { firstName: "Praise", lastName: "HDP", email: "cotact@holardeeps.pro" }
-  
   return (
     <section className="home no-scrollbar">
       <div className="home-content no-scrollbar">
@@ -13,15 +14,15 @@ const Home = () => {
           <HeaderBox
             type="greeting"
             title="Welcome"
-            user={loggednIn?.firstName || "Guest"}
+            user={loggednIn?.name}
             subtext="Access and manage your account and transactions efficiently."
-           />
-          
+          />
+
           <TotalBalance
             accounts={[]}
             totalBanks={1}
             totalCurrentBalance={12059.35}
-           />
+          />
         </header>
 
         {/* Recent Transactions */}
@@ -30,10 +31,10 @@ const Home = () => {
       <RightSidebar
         user={loggednIn}
         transactions={[]}
-        banks={[{ currentBalance: 2730.36 }, { currentBalance: 1466.02}]}
-       />
+        banks={[{ currentBalance: 2730.36 }, { currentBalance: 1466.02 }]}
+      />
     </section>
-  )
-}
+  );
+};
 
-export default Home
+export default Home;
