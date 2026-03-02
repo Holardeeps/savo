@@ -1,11 +1,17 @@
 import HeaderBox from "@/components/HeaderBox";
 import RightSidebar from "@/components/RightSidebar";
 import TotalBalance from "@/components/TotalBalance";
-import { getLoggedInUser } from "@/lib/actions/user.actions";
+import { getAccounts, getLoggedInUser } from "@/lib/actions/user.actions";
 
 const Home = async () => {
   const loggednIn = await getLoggedInUser();
+  const accounts = loggednIn ? await getAccounts({ userId: loggednIn.$id }) : [];
   const userFullName = `${loggednIn?.firstName ?? ""} ${loggednIn?.lastName ?? ""}`.trim();
+  const totalBanks = accounts.length;
+  const totalCurrentBalance = accounts.reduce(
+    (total: number, account: Account) => total + (account.currentBalance ?? 0),
+    0,
+  );
   // console.log(loggednIn);
 
   return (
@@ -20,9 +26,9 @@ const Home = async () => {
           />
 
           <TotalBalance
-            accounts={[]}
-            totalBanks={1}
-            totalCurrentBalance={12059.35}
+            accounts={accounts}
+            totalBanks={totalBanks}
+            totalCurrentBalance={totalCurrentBalance}
           />
         </header>
 

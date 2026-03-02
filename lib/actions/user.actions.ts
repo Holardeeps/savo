@@ -300,6 +300,7 @@ export const exchangePublicToken = async ({
       access_token: accessToken,
     });
 
+    console.log(accountsResponse.data.accounts);
     const accountData = accountsResponse.data.accounts[0];
 
     // Create a processor token for Dwolla using the access token and account ID
@@ -319,6 +320,7 @@ export const exchangePublicToken = async ({
       processorToken,
       bankName: accountData.name,
     });
+    if (!fundingSourceUrl) throw Error;
 
     // If the funding source URL is not created, throw an error
     if (!fundingSourceUrl) throw Error;
@@ -336,6 +338,12 @@ export const exchangePublicToken = async ({
     // Revalidate the path to reflect the changes
     revalidatePath("/");
 
+    console.log("exchangePublicToken called");
+
+    console.log("Access Token:", accessToken);
+    console.log("Accounts:", accountsResponse.data.accounts);
+    console.log("Processor Token:", processorToken);
+    console.log("Funding URL:", fundingSourceUrl);
     // Return a success message
     return parseStringify({
       publicTokenExchange: "complete",
@@ -394,5 +402,54 @@ export const getBankByAccountId = async ({
     return parseStringify(bank.documents[0]);
   } catch (error) {
     console.log(error);
+  }
+};
+
+export const getAccounts = async ({ userId }: getAccountsProps) => {
+  try {
+    const banks = (await getBanks({ userId })) ?? [];
+    if (!banks.length) return [];
+
+    const accounts = await Promise.all(
+      banks.map(async (bank: Bank) => {
+        try {
+          const accountsResponse = await plaidClient.accountsGet({
+            access_token: bank.accessToken,
+          });
+
+          const matchedAccount =
+            accountsResponse.data.accounts.find(
+              (account) => account.account_id === bank.accountId,
+            ) ?? accountsResponse.data.accounts[0];
+
+          if (!matchedAccount) return null;
+
+          return {
+            id: matchedAccount.account_id,
+            availableBalance: matchedAccount.balances.available ?? 0,
+            currentBalance: matchedAccount.balances.current ?? 0,
+            officialName: matchedAccount.official_name ?? matchedAccount.name,
+            mask: matchedAccount.mask ?? "",
+            institutionId: accountsResponse.data.item?.institution_id ?? "",
+            name: matchedAccount.name,
+            type: matchedAccount.type,
+            subtype: matchedAccount.subtype ?? "",
+            appwriteItemId: bank.$id,
+            shareableId: bank.shareableId,
+          };
+        } catch (error) {
+          console.error(
+            `Error getting plaid account for bank ${bank.$id}:`,
+            error,
+          );
+          return null;
+        }
+      }),
+    );
+
+    return parseStringify(accounts.filter(Boolean));
+  } catch (error) {
+    console.error("Error getting accounts:", error);
+    return [];
   }
 };
