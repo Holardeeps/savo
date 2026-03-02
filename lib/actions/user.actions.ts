@@ -1,6 +1,6 @@
 "use server";
 
-import { ID } from "node-appwrite";
+import { ID, Query } from "node-appwrite";
 import { createAdminClient, createSessionClient } from "../appwrite";
 import { cookies } from "next/headers";
 import { encryptId, extractCustomerIdFromUrl, parseStringify } from "../utils";
@@ -10,7 +10,8 @@ import {
   ProcessorTokenCreateRequestProcessorEnum,
   Products,
 } from "plaid";
-import { plaidClient } from "../plaid";
+
+import { plaidClient } from "@/lib/plaid";
 import { revalidatePath } from "next/cache";
 import { addFundingSource, createDwollaCustomer } from "./dwolla.actions";
 
@@ -20,70 +21,155 @@ const {
   APPWRITE_BANK_COLLECTION_ID: BANK_COLLECTION_ID,
 } = process.env;
 
-export const signIn = async (userData: signInProps) => {
-  try {
-    const { account } = await createAdminClient();
-    const response = await account.createEmailPasswordSession(userData);
+const isTimeoutError = (error: unknown): boolean => {
+  if (typeof error !== "object" || error === null) return false;
 
-    return parseStringify(response);
-  } catch (err) {
-    console.error("Error", err);
+  const hasTimeoutCode = (value: unknown) =>
+    value === "ETIMEDOUT" || value === "UND_ERR_CONNECT_TIMEOUT";
+
+  if ("code" in error && hasTimeoutCode(error.code)) {
+    return true;
+  }
+
+  if (
+    "cause" in error &&
+    typeof error.cause === "object" &&
+    error.cause !== null &&
+    "code" in error.cause &&
+    hasTimeoutCode(error.cause.code)
+  ) {
+    return true;
+  }
+
+  if ("errors" in error && Array.isArray(error.errors)) {
+    return error.errors.some(isTimeoutError);
+  }
+
+  return false;
+};
+
+const US_STATE_ABBREVIATIONS = new Set([
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
+]);
+
+export const getUserInfo = async ({ userId }: getUserInfoProps) => {
+  try {
+    const { database } = await createAdminClient();
+
+    const user = await database.listDocuments(
+      DATABASE_ID!,
+      USER_COLLECTION_ID!,
+      [Query.equal("userId", [userId])],
+    );
+
+    return parseStringify(user.documents[0]);
+  } catch (error) {
+    console.log(error);
   }
 };
 
-// export const signUp = async (userData: SignUpParams) => {
-//   const { email, password, firstName, lastName } = userData;
+export const signIn = async ({ email, password }: signInProps) => {
+  try {
+    const { account } = await createAdminClient();
+    const session = await account.createEmailPasswordSession(email, password);
 
-//   try {
-//     const { account } = await createAdminClient();
+    (await cookies()).set("appwrite-session", session.secret, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "strict",
+      secure: true,
+    });
 
-//     const newUserAccount = await account.create({
-//       userId: ID.unique(),
-//       email,
-//       password,
-//       name: `${firstName} ${lastName}`,
-//     });
-//     const session = await account.createEmailPasswordSession({
-//       email,
-//       password,
-//     });
+    const user = await getUserInfo({ userId: session.userId });
 
-//     await (
-//       await cookies()
-//     ).set("appwrite-session", session.secret, {
-//       path: "/",
-//       httpOnly: true,
-//       sameSite: "strict",
-//       secure: true,
-//     });
-
-//     return parseStringify(newUserAccount);
-//   } catch (err) {
-//     console.error("Error", err);
-//   }
-// };
-
-// ... your initilization functions
+    return parseStringify(user);
+  } catch (error) {
+    console.error("Error", error);
+  }
+};
 
 export const signUp = async ({ password, ...userData }: SignUpParams) => {
   const { email, firstName, lastName } = userData;
+  const normalizedState = userData.state.trim().toUpperCase();
 
   let newUserAccount;
 
   try {
     const { account, database } = await createAdminClient();
 
-    const newUserAccount = await account.create({
-      userId: ID.unique(),
-      email,
-      password,
-      name: `${firstName} ${lastName}`,
-    });
+    if (!US_STATE_ABBREVIATIONS.has(normalizedState)) {
+      throw new Error("State must be a valid 2-letter US abbreviation.");
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        newUserAccount = await account.create(
+          ID.unique(),
+          email,
+          password,
+          `${firstName} ${lastName}`,
+        );
+        break;
+      } catch (error) {
+        if (!isTimeoutError(error) || attempt === 3) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      }
+    }
 
     if (!newUserAccount) throw new Error("Error creating user");
 
     const dwollaCustomerUrl = await createDwollaCustomer({
       ...userData,
+      state: normalizedState,
       type: "personal",
     });
 
@@ -91,17 +177,18 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
 
     const dwollaCustomerId = extractCustomerIdFromUrl(dwollaCustomerUrl);
 
-    const newUser = await database.createDocument({
-      databaseId: DATABASE_ID!,
-      collectionId: USER_COLLECTION_ID!,
-      documentId: ID.unique(),
-      data: {
+    const newUser = await database.createDocument(
+      DATABASE_ID!,
+      USER_COLLECTION_ID!,
+      ID.unique(),
+      {
         ...userData,
+        state: normalizedState,
         userId: newUserAccount.$id,
         dwollaCustomerId,
         dwollaCustomerUrl,
       },
-    });
+    );
 
     const session = await account.createEmailPasswordSession(email, password);
 
@@ -121,18 +208,24 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
 export async function getLoggedInUser() {
   try {
     const { account } = await createSessionClient();
-    const user = await account.get();
+    const result = await account.get();
+
+    const user = await getUserInfo({ userId: result.$id });
+
     return parseStringify(user);
   } catch (error) {
-    return error;
+    console.log(error);
+    return null;
   }
 }
 
 export const logoutAccount = async () => {
   try {
     const { account } = await createSessionClient();
+
     (await cookies()).delete("appwrite-session");
-    await account.deleteSession({ sessionId: "current" });
+
+    await account.deleteSession("current");
   } catch (error) {
     return null;
   }
@@ -149,10 +242,12 @@ export const createLinkToken = async (user: User) => {
       language: "en",
       country_codes: ["US"] as CountryCode[],
     };
+
     const response = await plaidClient.linkTokenCreate(tokenParams);
+
     return parseStringify({ linkToken: response.data.link_token });
   } catch (error) {
-    console.error(error);
+    console.log(error);
   }
 };
 
@@ -182,7 +277,9 @@ export const createBankAccount = async ({
     );
 
     return parseStringify(bankAccount);
-  } catch (error) {}
+  } catch (error) {
+    console.log(error);
+  }
 };
 
 export const exchangePublicToken = async ({
@@ -245,5 +342,57 @@ export const exchangePublicToken = async ({
     });
   } catch (error) {
     console.error("An error occurred while creating exchanging token:", error);
+  }
+};
+
+export const getBanks = async ({ userId }: getBanksProps) => {
+  try {
+    const { database } = await createAdminClient();
+
+    const banks = await database.listDocuments(
+      DATABASE_ID!,
+      BANK_COLLECTION_ID!,
+      [Query.equal("userId", [userId])],
+    );
+
+    return parseStringify(banks.documents);
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+export const getBank = async ({ documentId }: getBankProps) => {
+  try {
+    const { database } = await createAdminClient();
+
+    const bank = await database.listDocuments(
+      DATABASE_ID!,
+      BANK_COLLECTION_ID!,
+      [Query.equal("$id", [documentId])],
+    );
+
+    return parseStringify(bank.documents[0]);
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+export const getBankByAccountId = async ({
+  accountId,
+}: getBankByAccountIdProps) => {
+  try {
+    const { database } = await createAdminClient();
+
+    const bank = await database.listDocuments(
+      DATABASE_ID!,
+      BANK_COLLECTION_ID!,
+      [Query.equal("accountId", [accountId])],
+    );
+
+    if (bank.total !== 1) return null;
+
+    return parseStringify(bank.documents[0]);
+  } catch (error) {
+    console.log(error);
   }
 };

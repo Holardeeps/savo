@@ -5,6 +5,7 @@ import { getLoggedInUser } from "@/lib/actions/user.actions";
 
 const Home = async () => {
   const loggednIn = await getLoggedInUser();
+  const userFullName = `${loggednIn?.firstName ?? ""} ${loggednIn?.lastName ?? ""}`.trim();
   // console.log(loggednIn);
 
   return (
@@ -14,7 +15,7 @@ const Home = async () => {
           <HeaderBox
             type="greeting"
             title="Welcome"
-            user={loggednIn?.name}
+            user={userFullName}
             subtext="Access and manage your account and transactions efficiently."
           />
 
