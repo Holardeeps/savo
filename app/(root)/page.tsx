@@ -2,9 +2,12 @@ import HeaderBox from "@/components/HeaderBox";
 import RightSidebar from "@/components/RightSidebar";
 import TotalBalance from "@/components/TotalBalance";
 import { getAccounts, getLoggedInUser } from "@/lib/actions/user.actions";
+import { redirect } from "next/navigation";
 
 const Home = async () => {
   const loggednIn = await getLoggedInUser();
+  if (!loggednIn) redirect("/sign-in");
+
   const accounts = loggednIn ? await getAccounts({ userId: loggednIn.$id }) : [];
   const userFullName = `${loggednIn?.firstName ?? ""} ${loggednIn?.lastName ?? ""}`.trim();
   const totalBanks = accounts.length;

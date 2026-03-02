@@ -7,7 +7,7 @@ import {
 } from "react-plaid-link";
 import { Button } from "./ui/button";
 import { useCallback, useEffect, useState } from "react";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   createLinkToken,
   exchangePublicToken,
@@ -15,6 +15,7 @@ import {
 
 const PlaidLink = ({ user, variant }: PlaidLinkProps) => {
   const [token, setToken] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     const getLinkToken = async () => {
@@ -31,9 +32,9 @@ const PlaidLink = ({ user, variant }: PlaidLinkProps) => {
         publicToken: public_token,
         user,
       });
-      redirect("/");
+      router.push("/");
     },
-    [user],
+    [router, user],
   );
 
   const config: PlaidLinkOptions = {

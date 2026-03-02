@@ -32,13 +32,16 @@ const isTimeoutError = (error: unknown): boolean => {
   }
 
   if (
-    "cause" in error &&
-    typeof error.cause === "object" &&
-    error.cause !== null &&
-    "code" in error.cause &&
-    hasTimeoutCode(error.cause.code)
+    "message" in error &&
+    typeof error.message === "string" &&
+    (error.message.includes("ETIMEDOUT") ||
+      error.message.toLowerCase().includes("timeout"))
   ) {
     return true;
+  }
+
+  if ("cause" in error && error.cause) {
+    if (isTimeoutError(error.cause)) return true;
   }
 
   if ("errors" in error && Array.isArray(error.errors)) {
@@ -120,13 +123,29 @@ export const getUserInfo = async ({ userId }: getUserInfoProps) => {
 export const signIn = async ({ email, password }: signInProps) => {
   try {
     const { account } = await createAdminClient();
-    const session = await account.createEmailPasswordSession(email, password);
+    let session: Awaited<
+      ReturnType<typeof account.createEmailPasswordSession>
+    > | null = null;
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        session = await account.createEmailPasswordSession(email, password);
+        break;
+      } catch (error) {
+        if (!isTimeoutError(error) || attempt === 5) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+      }
+    }
+
+    if (!session?.secret || !session?.userId) {
+      throw new Error("Unable to establish a valid session.");
+    }
 
     (await cookies()).set("appwrite-session", session.secret, {
       path: "/",
       httpOnly: true,
       sameSite: "strict",
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
     });
 
     const user = await getUserInfo({ userId: session.userId });
@@ -150,7 +169,7 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
       throw new Error("State must be a valid 2-letter US abbreviation.");
     }
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         newUserAccount = await account.create(
           ID.unique(),
@@ -160,8 +179,8 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
         );
         break;
       } catch (error) {
-        if (!isTimeoutError(error) || attempt === 3) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+        if (!isTimeoutError(error) || attempt === 5) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
       }
     }
 
@@ -190,13 +209,31 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
       },
     );
 
-    const session = await account.createEmailPasswordSession(email, password);
+    let session: Awaited<
+      ReturnType<typeof account.createEmailPasswordSession>
+    > | null = null;
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        session = await account.createEmailPasswordSession(email, password);
+        break;
+      } catch (error) {
+        if (!isTimeoutError(error) || attempt === 5) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+      }
+    }
+
+    if (!session?.secret) {
+      throw new Error(
+        "Account created, but automatic sign-in failed. Please sign in manually.",
+      );
+    }
 
     (await cookies()).set("appwrite-session", session.secret, {
       path: "/",
       httpOnly: true,
       sameSite: "strict",
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
     });
 
     return parseStringify(newUser);
@@ -206,17 +243,35 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
 };
 
 export async function getLoggedInUser() {
-  try {
-    const { account } = await createSessionClient();
-    const result = await account.get();
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const { account } = await createSessionClient();
+      const result = await account.get();
+      const user = await getUserInfo({ userId: result.$id });
 
-    const user = await getUserInfo({ userId: result.$id });
+      return parseStringify(user);
+    } catch (error: unknown) {
+      const noSession = error instanceof Error && error.message === "No session";
+      if (noSession) return null;
 
-    return parseStringify(user);
-  } catch (error) {
-    console.log(error);
-    return null;
+      const unauthorized =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === 401;
+
+      if (unauthorized) return null;
+
+      if (!isTimeoutError(error) || attempt === 5) {
+        console.log(error);
+        return null;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+    }
   }
+
+  return null;
 }
 
 export const logoutAccount = async () => {

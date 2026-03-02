@@ -23,6 +23,46 @@ const dwollaClient = new Client({
   secret: process.env.DWOLLA_SECRET as string,
 });
 
+const getDuplicateCustomerHref = (err: unknown): string | null => {
+  if (typeof err !== "object" || err === null || !("body" in err)) {
+    return null;
+  }
+
+  const body = err.body;
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("_embedded" in body) ||
+    typeof body._embedded !== "object" ||
+    body._embedded === null ||
+    !("errors" in body._embedded) ||
+    !Array.isArray(body._embedded.errors)
+  ) {
+    return null;
+  }
+
+  for (const embeddedError of body._embedded.errors) {
+    if (
+      typeof embeddedError === "object" &&
+      embeddedError !== null &&
+      "code" in embeddedError &&
+      embeddedError.code === "Duplicate" &&
+      "_links" in embeddedError &&
+      typeof embeddedError._links === "object" &&
+      embeddedError._links !== null &&
+      "about" in embeddedError._links &&
+      typeof embeddedError._links.about === "object" &&
+      embeddedError._links.about !== null &&
+      "href" in embeddedError._links.about &&
+      typeof embeddedError._links.about.href === "string"
+    ) {
+      return embeddedError._links.about.href;
+    }
+  }
+
+  return null;
+};
+
 // Create a Dwolla Funding Source using a Plaid Processor Token
 export const createFundingSource = async (
   options: CreateFundingSourceOptions,
@@ -59,6 +99,10 @@ export const createDwollaCustomer = async (
       .post("customers", newCustomer)
       .then((res) => res.headers.get("location"));
   } catch (err) {
+    const duplicateCustomerHref = getDuplicateCustomerHref(err);
+    if (duplicateCustomerHref) {
+      return duplicateCustomerHref;
+    }
     console.error("Creating a Dwolla Customer Failed: ", err);
   }
 };
