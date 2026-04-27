@@ -149,6 +149,11 @@ export const signIn = async ({ email, password }: signInProps) => {
     });
 
     const user = await getUserInfo({ userId: session.userId });
+    if (!user) {
+      throw new Error(
+        "Sign-in succeeded, but user profile could not be loaded. Please retry.",
+      );
+    }
 
     return parseStringify(user);
   } catch (error) {
@@ -159,6 +164,8 @@ export const signIn = async ({ email, password }: signInProps) => {
 export const signUp = async ({ password, ...userData }: SignUpParams) => {
   const { email, firstName, lastName } = userData;
   const normalizedState = userData.state.trim().toUpperCase();
+  const normalizedDateOfBirth = userData.dateOfBirth.trim();
+  const normalizedSsn = userData.ssn.replace(/\D/g, "");
 
   let newUserAccount;
 
@@ -167,6 +174,12 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
 
     if (!US_STATE_ABBREVIATIONS.has(normalizedState)) {
       throw new Error("State must be a valid 2-letter US abbreviation.");
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDateOfBirth)) {
+      throw new Error("Date of birth must use YYYY-MM-DD format.");
+    }
+    if (!/^\d{9}$/.test(normalizedSsn)) {
+      throw new Error("SSN must contain exactly 9 digits.");
     }
 
     for (let attempt = 1; attempt <= 5; attempt++) {
@@ -189,6 +202,8 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
     const dwollaCustomerUrl = await createDwollaCustomer({
       ...userData,
       state: normalizedState,
+      dateOfBirth: normalizedDateOfBirth,
+      ssn: normalizedSsn,
       type: "personal",
     });
 
@@ -203,6 +218,8 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
       {
         ...userData,
         state: normalizedState,
+        dateOfBirth: normalizedDateOfBirth,
+        ssn: normalizedSsn,
         userId: newUserAccount.$id,
         dwollaCustomerId,
         dwollaCustomerUrl,
@@ -249,7 +266,29 @@ export async function getLoggedInUser() {
       const result = await account.get();
       const user = await getUserInfo({ userId: result.$id });
 
-      return parseStringify(user);
+      if (user) return parseStringify(user);
+
+      // If the session is valid but profile lookup temporarily fails,
+      // keep the user signed in with a safe fallback shape.
+      const [firstName = "", ...rest] = (result.name ?? "").trim().split(/\s+/);
+      const fallbackUser: User = {
+        $id: result.$id,
+        email: result.email,
+        userId: result.$id,
+        dwollaCustomerUrl: "",
+        dwollaCustomerId: "",
+        firstName,
+        lastName: rest.join(" "),
+        name: result.name ?? "",
+        address1: "",
+        city: "",
+        state: "",
+        postalCode: "",
+        dateOfBirth: "",
+        ssn: "",
+      };
+
+      return parseStringify(fallbackUser);
     } catch (error: unknown) {
       const noSession = error instanceof Error && error.message === "No session";
       if (noSession) return null;
