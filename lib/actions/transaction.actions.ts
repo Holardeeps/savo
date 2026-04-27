@@ -49,6 +49,18 @@ export const createTransaction = async ({
   }
 };
 
+const isAppwriteMissingAttributeError = (error: unknown): boolean => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === 400 &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.includes("Attribute not found in schema")
+  );
+};
+
 export const getTransactionsByBankId = async ({
   bankId,
   page = 1,
@@ -114,15 +126,7 @@ export const getTransactionsByBankId = async ({
     // Compatibility fallback:
     // some setups have a transactions collection without sender/receiver fields yet.
     // In that case, fetch a larger slice and filter in memory across known field shapes.
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === 400 &&
-      "message" in error &&
-      typeof error.message === "string" &&
-      error.message.includes("Attribute not found in schema")
-    ) {
+    if (isAppwriteMissingAttributeError(error)) {
       try {
         const { database } = await createAdminClient();
         const docs = await database.listDocuments(
@@ -229,6 +233,14 @@ export const transferPayment = async ({
   name: string;
 }) => {
   try {
+    const transferAmount = Number(amount);
+    if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
+      return { success: false, message: "Enter a valid transfer amount." };
+    }
+    if (!email.includes("@")) {
+      return { success: false, message: "Enter a valid receiver email." };
+    }
+
     const { database } = await createAdminClient();
     const senderBank = await database.getDocument(
       DATABASE_ID!,
@@ -236,37 +248,63 @@ export const transferPayment = async ({
       senderBankId,
     );
     if (!senderBank?.fundingSourceUrl) {
-      throw new Error("Sender bank funding source not found");
+      return {
+        success: false,
+        message: "Selected sender account is not ready for transfers yet.",
+      };
     }
 
     const receiverBank = await getBankByAccountId({
       accountId: decryptId(receiverShareableId),
     });
-    if (!receiverBank) throw new Error("Receiver bank account not found");
+    if (!receiverBank) {
+      return {
+        success: false,
+        message: "Receiver bank account was not found. Check the shareable ID.",
+      };
+    }
+    if (!receiverBank.fundingSourceUrl) {
+      return {
+        success: false,
+        message: "Receiver bank account is missing a funding source.",
+      };
+    }
 
-    await createTransfer({
+    const transferUrl = await createTransfer({
       sourceFundingSourceUrl: senderBank.fundingSourceUrl,
       destinationFundingSourceUrl: receiverBank.fundingSourceUrl,
-      amount,
+      amount: transferAmount.toFixed(2),
     });
+    if (!transferUrl) {
+      return {
+        success: false,
+        message: "Transfer failed with Dwolla. Please try again.",
+      };
+    }
 
-    await createTransaction({
+    const transactionRecord = await createTransaction({
       name,
-      amount,
+      amount: transferAmount,
       senderId: senderBank.userId,
       senderBankId,
       receiverId: receiverBank.userId,
       receiverBankId: receiverBank.$id,
       email,
     });
+    if (!transactionRecord) {
+      return {
+        success: false,
+        message: "Transfer completed but transaction log could not be saved.",
+      };
+    }
 
     revalidatePath("/");
     revalidatePath("/payment-transfer");
     revalidatePath("/transaction-history");
 
-    return { success: true };
+    return { success: true, message: "Transfer completed successfully." };
   } catch (error) {
     console.error("Transfer payment failed:", error);
-    return { success: false };
+    return { success: false, message: "Transfer failed unexpectedly." };
   }
 };

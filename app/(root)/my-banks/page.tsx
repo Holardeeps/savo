@@ -2,10 +2,10 @@ import BankCard from "@/components/BankCard";
 import BankInfo from "@/components/BankInfo";
 import HeaderBox from "@/components/HeaderBox";
 import {
-  getAccounts,
   getLoggedInUser,
   getUserInfo,
 } from "@/lib/actions/user.actions";
+import { getAccounts } from "@/lib/actions/bank.actions";
 import { redirect } from "next/navigation";
 
 const MyBanks = async () => {

@@ -1,6 +1,7 @@
 import HeaderBox from "@/components/HeaderBox";
 import PaymentTransferForm from "@/components/PaymentTransferForm";
-import { getAccounts, getLoggedInUser } from "@/lib/actions/user.actions";
+import { getLoggedInUser } from "@/lib/actions/user.actions";
+import { getAccounts } from "@/lib/actions/bank.actions";
 import { redirect } from "next/navigation";
 
 const Transfer = async () => {

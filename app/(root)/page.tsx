@@ -2,7 +2,9 @@ import HeaderBox from "@/components/HeaderBox";
 import RecentTransactions from "@/components/RecentTransactions";
 import RightSidebar from "@/components/RightSidebar";
 import TotalBalance from "@/components/TotalBalance";
-import { getAccounts, getLoggedInUser } from "@/lib/actions/user.actions";
+import { getTransactionsByBankId } from "@/lib/actions/transaction.actions";
+import { getLoggedInUser } from "@/lib/actions/user.actions";
+import { getAccounts } from "@/lib/actions/bank.actions";
 import { redirect } from "next/navigation";
 
 const Home = async ({
@@ -23,6 +25,9 @@ const Home = async ({
     : resolvedSearchParams.id;
   const page = Number(pageValue) || 1;
   const appwriteItemId = idValue || accounts[0]?.appwriteItemId;
+  const recentTransactionsData = appwriteItemId
+    ? await getTransactionsByBankId({ bankId: appwriteItemId, page })
+    : { documents: [] };
   const userFullName = `${loggednIn?.firstName ?? ""} ${loggednIn?.lastName ?? ""}`.trim();
   const totalBanks = accounts.length;
   const totalCurrentBalance = accounts.reduce(
@@ -58,7 +63,7 @@ const Home = async ({
 
       <RightSidebar
         user={loggednIn}
-        transactions={[]}
+        transactions={recentTransactionsData.documents ?? []}
         banks={accounts}
       />
     </section>

@@ -17,6 +17,7 @@ import { transferPayment } from "@/lib/actions/transaction.actions";
 const PaymentTransferForm = ({ accounts }: PaymentTransferFormProps) => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "error" | "success"; message: string } | null>(null);
   const [senderBankId, setSenderBankId] = useState(accounts[0]?.appwriteItemId ?? "");
   const [receiverShareableId, setReceiverShareableId] = useState("");
   const [email, setEmail] = useState("");
@@ -31,6 +32,7 @@ const PaymentTransferForm = ({ accounts }: PaymentTransferFormProps) => {
     event.preventDefault();
     if (!canSubmit) return;
 
+    setFeedback(null);
     setIsSubmitting(true);
     try {
       const result = await transferPayment({
@@ -42,7 +44,10 @@ const PaymentTransferForm = ({ accounts }: PaymentTransferFormProps) => {
       });
 
       if (result.success) {
+        setFeedback({ type: "success", message: result.message ?? "Transfer successful." });
         router.push("/transaction-history");
+      } else if (result.message) {
+        setFeedback({ type: "error", message: result.message });
       }
     } finally {
       setIsSubmitting(false);
@@ -114,6 +119,11 @@ const PaymentTransferForm = ({ accounts }: PaymentTransferFormProps) => {
       <Button type="submit" className="form-btn w-full" disabled={!canSubmit || isSubmitting}>
         {isSubmitting ? "Processing..." : "Transfer Funds"}
       </Button>
+      {feedback && (
+        <p className={`text-14 ${feedback.type === "error" ? "text-red-600" : "text-green-700"}`}>
+          {feedback.message}
+        </p>
+      )}
     </form>
   );
 };

@@ -2,7 +2,8 @@ import HeaderBox from "@/components/HeaderBox";
 import Pagination from "@/components/Pagination";
 import TransactionTable from "@/components/TransactionTable";
 import { getTransactionsByBankId } from "@/lib/actions/transaction.actions";
-import { getAccounts, getLoggedInUser } from "@/lib/actions/user.actions";
+import { getLoggedInUser } from "@/lib/actions/user.actions";
+import { getAccounts } from "@/lib/actions/bank.actions";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -15,7 +16,7 @@ const TransactionHistory = async ({
   if (!loggedIn) redirect("/sign-in");
 
   const resolvedSearchParams = await searchParams;
-  const accounts = await getAccounts({ userId: loggedIn.$id });
+  const accounts = (await getAccounts({ userId: loggedIn.$id })) ?? [];
   const pageValue = Array.isArray(resolvedSearchParams.page)
     ? resolvedSearchParams.page[0]
     : resolvedSearchParams.page;
@@ -26,9 +27,11 @@ const TransactionHistory = async ({
   const appwriteItemId = idValue || accounts[0]?.appwriteItemId;
 
   const account = accounts.find((item) => item.appwriteItemId === appwriteItemId);
-  const transactions = account
+  const transactionsData = account
     ? await getTransactionsByBankId({ bankId: account.appwriteItemId, page })
     : { total: 0, totalPages: 1, documents: [] };
+  const transactions = (transactionsData?.documents ?? []) as Transaction[];
+  const totalPages = transactionsData?.totalPages ?? 1;
 
   return (
     <section className="flex w-full flex-col gap-8 p-5 sm:p-8 lg:p-12">
@@ -53,8 +56,8 @@ const TransactionHistory = async ({
         ))}
       </div>
 
-      <TransactionTable transactions={transactions.documents} />
-      <Pagination page={page} totalPages={transactions.totalPages} />
+      <TransactionTable transactions={transactions} />
+      <Pagination page={page} totalPages={totalPages} />
     </section>
   );
 };

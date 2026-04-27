@@ -1,10 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import BankCard from "./BankCard";
+import Category from "./Category";
+import { countTransactionCategories } from "@/lib/utils";
 
 const RightSidebar = ({ user, transactions, banks }: RightSidebarProps) => {
   const fullName = `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim();
   const initial = user?.firstName?.[0] ?? user?.lastName?.[0] ?? "";
+  const categories = countTransactionCategories(transactions || []).slice(0, 3);
 
   return (
     <aside className="right-sidebar no-scrollbar">
@@ -53,6 +56,17 @@ const RightSidebar = ({ user, transactions, banks }: RightSidebarProps) => {
             )}
           </div>
         )}
+
+        <div className="flex flex-col gap-3">
+          <h2 className="header-2">Spending Categories</h2>
+          {categories.length > 0 ? (
+            categories.map((category) => (
+              <Category key={category.name} category={category} />
+            ))
+          ) : (
+            <p className="text-14 text-gray-500">No spending data yet.</p>
+          )}
+        </div>
       </section>
     </aside>
   );

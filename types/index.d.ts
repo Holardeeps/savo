@@ -70,7 +70,7 @@ declare type Transaction = {
   paymentChannel: string;
   type: string;
   accountId: string;
-  amount: number;
+  amount: number | string;
   pending: boolean;
   category: string;
   date: string;
@@ -226,7 +226,6 @@ declare interface SiderbarProps {
 
 declare interface RecentTransactionsProps {
   accounts: Account[];
-  transactions: Transaction[];
   appwriteItemId: string;
   page: number;
 }
@@ -282,7 +281,7 @@ declare interface CreateFundingSourceOptions {
 
 declare interface CreateTransactionProps {
   name: string;
-  amount: string;
+  amount: number;
   senderId: string;
   senderBankId: string;
   receiverId: string;
