@@ -104,6 +104,33 @@ const US_STATE_ABBREVIATIONS = new Set([
   "WY",
 ]);
 
+const isValidDwollaDateOfBirth = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
+    return false;
+  }
+
+  const today = new Date();
+  const todayUtc = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
+  let age = todayUtc.getUTCFullYear() - year;
+  const birthdayThisYear = new Date(
+    Date.UTC(todayUtc.getUTCFullYear(), month - 1, day),
+  );
+  if (todayUtc < birthdayThisYear) age -= 1;
+
+  return age >= 18 && age <= 125;
+};
+
 export const getUserInfo = async ({ userId }: getUserInfoProps) => {
   try {
     const { database } = await createAdminClient();
@@ -166,6 +193,11 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
   const normalizedState = userData.state.trim().toUpperCase();
   const normalizedDateOfBirth = userData.dateOfBirth.trim();
   const normalizedSsn = userData.ssn.replace(/\D/g, "");
+  const normalizedPostalCode = userData.postalCode.trim();
+  const normalizedCity = userData.city.trim();
+  const normalizedAddress1 = userData.address1.trim();
+  const normalizedFirstName = userData.firstName.trim();
+  const normalizedLastName = userData.lastName.trim();
 
   let newUserAccount;
 
@@ -175,11 +207,16 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
     if (!US_STATE_ABBREVIATIONS.has(normalizedState)) {
       throw new Error("State must be a valid 2-letter US abbreviation.");
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDateOfBirth)) {
-      throw new Error("Date of birth must use YYYY-MM-DD format.");
+    if (!isValidDwollaDateOfBirth(normalizedDateOfBirth)) {
+      throw new Error(
+        "Date of birth must be valid YYYY-MM-DD and age must be between 18 and 125.",
+      );
     }
     if (!/^\d{9}$/.test(normalizedSsn)) {
       throw new Error("SSN must contain exactly 9 digits.");
+    }
+    if (!/^\d{5}(-\d{4})?$/.test(normalizedPostalCode)) {
+      throw new Error("Postal code must be a valid US ZIP format.");
     }
 
     for (let attempt = 1; attempt <= 5; attempt++) {
@@ -201,6 +238,11 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
 
     const dwollaCustomerUrl = await createDwollaCustomer({
       ...userData,
+      firstName: normalizedFirstName,
+      lastName: normalizedLastName,
+      address1: normalizedAddress1,
+      city: normalizedCity,
+      postalCode: normalizedPostalCode,
       state: normalizedState,
       dateOfBirth: normalizedDateOfBirth,
       ssn: normalizedSsn,
@@ -217,6 +259,11 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
       ID.unique(),
       {
         ...userData,
+        firstName: normalizedFirstName,
+        lastName: normalizedLastName,
+        address1: normalizedAddress1,
+        city: normalizedCity,
+        postalCode: normalizedPostalCode,
         state: normalizedState,
         dateOfBirth: normalizedDateOfBirth,
         ssn: normalizedSsn,

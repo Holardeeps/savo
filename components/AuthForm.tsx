@@ -162,7 +162,7 @@ const AuthForm = ({ type }: { type: string }) => {
                       control={form.control}
                       name="ssn"
                       label="SSN"
-                      placeholder="Example: 234-343-556"
+                      placeholder="Example: 123-45-6789"
                     />
                   </div>
                 </>

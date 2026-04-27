@@ -194,7 +194,7 @@ declare interface AuthFormProps {
 
 declare interface BankDropdownProps {
   accounts: Account[];
-  setValue?: UseFormSetValue<any>;
+  setValue?: UseFormSetValue<unknown>;
   otherStyles?: string;
 }
 
@@ -217,7 +217,7 @@ declare interface FooterProps {
 declare interface RightSidebarProps {
   user: User;
   transactions: Transaction[];
-  banks: Bank[] & Account[];
+  banks: Account[];
 }
 
 declare interface SiderbarProps {
@@ -292,6 +292,7 @@ declare interface CreateTransactionProps {
 
 declare interface getTransactionsByBankIdProps {
   bankId: string;
+  page?: number;
 }
 
 declare interface signInProps {

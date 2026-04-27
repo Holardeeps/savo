@@ -76,11 +76,11 @@ export function formatAmount(amount: number): string {
   return formatter.format(amount);
 }
 
-export const parseStringify = (value: any) => {
+export const parseStringify = <T>(value: T): T | null => {
   if (value === undefined) return null;
 
   try {
-    return JSON.parse(JSON.stringify(value));
+    return JSON.parse(JSON.stringify(value)) as T;
   } catch {
     return value;
   }
@@ -203,6 +203,37 @@ export const getTransactionStatus = (date: Date) => {
   return date > twoDaysAgo ? "Processing" : "Success";
 };
 
+const isValidDateOfBirth = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  // Ensure date pieces are real (e.g. reject 2026-02-30)
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
+    return false;
+  }
+
+  const today = new Date();
+  const todayUtc = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
+  let age = todayUtc.getUTCFullYear() - year;
+  const birthdayThisYear = new Date(
+    Date.UTC(todayUtc.getUTCFullYear(), month - 1, day),
+  );
+
+  if (todayUtc < birthdayThisYear) {
+    age -= 1;
+  }
+
+  return age >= 18 && age <= 125;
+};
+
 // Creating form schema on data types user should pass in.
 export const authFormSchema = (type: string) =>
   z.object({
@@ -210,11 +241,19 @@ export const authFormSchema = (type: string) =>
     firstName:
       type === "sign-in"
         ? z.string().optional()
-        : z.string().min(3, { message: "Enter least 3 chracters." }),
+        : z
+            .string()
+            .trim()
+            .min(2, { message: "Enter at least 2 characters." })
+            .max(50, { message: "Enter not more than 50 characters." }),
     lastName:
       type === "sign-in"
         ? z.string().optional()
-        : z.string().min(3, { message: "Enter least 3 chracters." }),
+        : z
+            .string()
+            .trim()
+            .min(2, { message: "Enter at least 2 characters." })
+            .max(50, { message: "Enter not more than 50 characters." }),
     address1:
       type === "sign-in"
         ? z.string().optional()
@@ -225,32 +264,48 @@ export const authFormSchema = (type: string) =>
     city:
       type === "sign-in"
         ? z.string().optional()
-        : z.string().max(50, { message: "Enter not more than 50 characters." }),
+        : z
+            .string()
+            .trim()
+            .min(2, { message: "Enter at least 2 characters." })
+            .max(50, { message: "Enter not more than 50 characters." }),
     state:
       type === "sign-in"
         ? z.string().optional()
         : z
             .string()
-            .min(2, { message: "Enter at least 2 characters." })
-            .max(2, { message: "Enter not more than 2 characters." }),
+            .trim()
+            .regex(/^[A-Za-z]{2}$/, {
+              message: "Use a valid 2-letter US state code (e.g., NY).",
+            }),
     postalCode:
       type === "sign-in"
         ? z.string().optional()
         : z
             .string()
-            .min(3, { message: "Enter at least 3 characters." })
-            .max(6, { message: "Enter not more than 6 characters." }),
+            .trim()
+            .regex(/^\d{5}(-\d{4})?$/, {
+              message: "Use a valid US ZIP code (12345 or 12345-6789).",
+            }),
     dateOfBirth:
       type === "sign-in"
         ? z.string().optional()
-        : z.string().min(4, { message: "Enter at least 4 characters." }),
+        : z
+            .string()
+            .trim()
+            .refine(isValidDateOfBirth, {
+              message:
+                "Use a valid YYYY-MM-DD date. Age must be between 18 and 125.",
+            }),
     ssn:
       type === "sign-in"
         ? z.string().optional()
         : z
             .string()
-            .min(9, { message: "Enter at least 9 characters." })
-            .max(12, { message: "Enter not more than 12 characters." }),
+            .trim()
+            .regex(/^\d{3}-?\d{2}-?\d{4}$/, {
+              message: "Use a valid SSN format (123-45-6789 or 123456789).",
+            }),
     // both
     email: z
       .string()
